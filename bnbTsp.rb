@@ -1,84 +1,107 @@
-class TSP
-    class Node
-      attr_reader :city, :parent, :visited, :path, :cost, :level
-      
-      def initialize(adj_matrix, city, parent, visited, path = [0], cost = 0)
-        @adj_matrix = adj_matrix
-        @city = city
-        @parent = parent
-        @visited = visited
-        @path = path
-        @cost = cost
-        @level = visited.size
-      end
-    end
-    
+class BNBTSP
     def initialize(adj_matrix)
       @adj_matrix = adj_matrix
-      @n = adj_matrix.size - 1
-      @best_path = nil
-      @best_cost = Float::INFINITY
+      @num_nodes = adj_matrix.length
     end
-    
+  
     def solve
-      @best_cost = Float::INFINITY
-      @best_path = nil
-      root = Node.new(@adj_matrix, 0, nil, [])
-      queue = [root]
+      path_awal = [0]
+      cost_awal = 0
+      calculate_path(path_awal, cost_awal, Set.new([0]))
+    end
+  
+    private
+  
+    def calculate_path(path, cost, visited_nodes)
       
-      until queue.empty?
-        curr_node = queue.shift
-        
-        if curr_node.cost >= @best_cost
-          next
-        end
-        
-        if curr_node.level == @n
-          curr_cost = curr_node.cost + @adj_matrix[curr_node.city][0]
-          if curr_cost < @best_cost
-            @best_cost = curr_cost
-            @best_path = curr_node.path + [0]
-          end
-          next
-        end
-        
-        (0...@n).each do |i|
-          if curr_node.visited.include?(i)
-            next
-          end
-          
-          new_cost = curr_node.cost + @adj_matrix[curr_node.city][i]
-          new_visited = curr_node.visited.dup
-          new_visited.push(i)
-          new_path = curr_node.path.dup
-          new_path.push(i)
-          new_node = Node.new(@adj_matrix, i, curr_node, new_visited, new_path, new_cost)
-          queue.push(new_node)
-        end
+        # udh di node trakhir di current rute
+        # add return edge to 0, balik ke node awal 
+        # misal: 0-1-2-3 -> 0-1-2-3-0
+        if path.length == @num_nodes
+            cost += @adj_matrix[path[-1]][0]
+            path.push(0)
+        return { path: path, cost: cost }
       end
-      
-      return @best_path, @best_cost
+  
+      best_path = nil
+      best_cost = Float::INFINITY    # klo di py kyk maxSize gt
+  
+      (0...@num_nodes).each do |next_node|
+        next unless visited_nodes.add?(next_node)
+  
+        # lower bound
+        lower_bound = calculate_lower_bound(path, cost, visited_nodes, next_node)
+        next if lower_bound >= best_cost
+  
+        # maskin next_node ke path, recursive
+        new_cost = cost + @adj_matrix[path[-1]][next_node]
+        new_path = path.dup
+        new_path.push(next_node)
+  
+        solution = calculate_path(new_path, new_cost, visited_nodes)
+  
+        if solution[:cost] < best_cost
+          best_path = solution[:path]
+          best_cost = solution[:cost]
+        end
+  
+        # backtrack
+        visited_nodes.delete(next_node)
+      end
+  
+      { path: best_path, cost: best_cost }
+    end
+  
+    def calculate_lower_bound(path, cost, visited_nodes, next_node)
+      #  cost buat visit semua node yg blm divisit dari next_node
+      unvisited_nodes = Set.new((0...@num_nodes).to_a) - visited_nodes
+      unvisited_nodes.delete(next_node)
+  
+      if unvisited_nodes.empty?
+        # All nodes udh divisit, add return edge to 0
+        return cost + @adj_matrix[next_node][0]
+      end
+  
+      lower_bound = cost
+  
+      # calculate lower bound dari min weight edge dari tiap unvisited node
+      unvisited_nodes.each do |node|
+        min_edge_weight = Float::INFINITY
+  
+        @adj_matrix[node].each_with_index do |weight, i|
+          next if visited_nodes.include?(i)
+  
+          min_edge_weight = [min_edge_weight, weight].min
+        end
+  
+        lower_bound += min_edge_weight
+      end
+  
+      # calculate lower bound dari two min weight edge dari tiap unvisited node
+      next_min_edges = @adj_matrix[next_node].sort[0..1]
+      lower_bound += next_min_edges.sum
+  
+      lower_bound
     end
   end
   
-  # user input
-  print "Masukkan ukuran matrix (n x n): "
+  # Main program
+  print 'Masukkan ukuran matrix (n x n): '
   n = gets.chomp.to_i
   
-  adj_matrix = []
+  # Minta input matrix dari user
+  adj_matrix = Array.new(n) { Array.new(n) }
   (0...n).each do |i|
-    row = []
     (0...n).each do |j|
-      print "masukkan elemen [#{i},#{j}]: "
-      distance = gets.chomp.to_i
-      row.push(distance)
+      print "Masukkan nilai elemen (#{i},#{j}): "
+      adj_matrix[i][j] = gets.chomp.to_i
     end
-    adj_matrix.push(row)
   end
   
-  # main
-  tsp = TSP.new(adj_matrix)
-  path, cost = tsp.solve
-  puts "Rute: #{path.join(' -> ')}"
-  puts "(dengan bobot minimum: #{cost})"
+  solver = BNBTSP.new(adj_matrix)
+  solution = solver.solve
+  
+  puts "Rute terpendek: #{solution[:path].join(' -> ')}"
+  puts "Bobot minimum: #{solution[:cost]}"
+  
   
